@@ -1,0 +1,14 @@
+# Не копировать в контекст сборки
+.git
+.gitignore
+.env
+server/.env
+server/wedding-rsvp
+server/*.exe
+*.md
+.dockerignore
+Dockerfile
+docker-compose.yml
+.idea
+.vscode
+*.log

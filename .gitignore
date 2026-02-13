@@ -1,0 +1,32 @@
+# Секреты
+.env
+server/.env
+*.env
+!.env.example
+!server/.env.example
+
+# Go
+server/wedding-rsvp
+server/*.exe
+server/*.test
+server/vendor/
+
+# Docker
+.docker/
+
+# IDE и ОС
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Данные ответов (экспорт через ручку)
+data/
+
+# Логи
+*.log
+
+DEPLOY.md
+
+.env.example

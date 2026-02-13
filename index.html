@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Приглашение на свадьбу</title>
+  <link rel="icon" href="magic-ring_14234767.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Montserrat:wght@200;300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Узоры по краям на всю высоту -->
+  <div class="side-pattern side-pattern--left" aria-hidden="true"></div>
+  <div class="side-pattern side-pattern--right" aria-hidden="true"></div>
+
+  <div class="page">
+    <!-- Hero = фото на весь экран как фон, текст поверх -->
+    <header class="hero hero--fullscreen" id="hero">
+      <div class="hero__bg hero__bg--photo" role="img" aria-label="Фото молодожёнов"></div>
+      <div class="hero__overlay"></div>
+      <div class="hero__inner">
+        <div class="hero__content">
+          <p class="hero__label">Приглашаем вас</p>
+          <h1 class="hero__title">Свадьба</h1>
+          <p class="hero__names">Александр & Дарья</p>
+          <div class="hero__line"></div>
+          <p class="hero__date">2026</p>
+        </div>
+      </div>
+      <a href="#invitation" class="hero__scroll" aria-label="Листать вниз"></a>
+    </header>
+
+    <section class="section section--cream" id="invitation">
+      <div class="section__inner">
+        <span class="section__number">01</span>
+        <h2 class="section__title">О нашем дне</h2>
+        <div class="section__text">
+          <p>Мы будем рады разделить с вами один из самых важных дней нашей жизни. Церемония и праздник пройдут в атмосфере тихой роскоши — так, как мы всегда мечтали.</p>
+          <p>Просим сохранить эту дату и подтвердить своё присутствие не позднее чем за месяц до свадьбы — через форму ниже.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section--dark" id="details">
+      <div class="section__inner">
+        <span class="section__number section__number--light">02</span>
+        <h2 class="section__title section__title--light">Детали</h2>
+        <div class="details-grid">
+          <div class="detail">
+            <span class="detail__label">Дата</span>
+            <span class="detail__value">— 00 месяц 2026</span>
+          </div>
+          <div class="detail">
+            <span class="detail__label">Время</span>
+            <span class="detail__value">— 00:00</span>
+          </div>
+          <div class="detail">
+            <span class="detail__label">Место</span>
+            <span class="detail__value">— <a href="{{WEDDING_PLACE_URL}}" class="detail__link">{{WEDDING_PLACE_NAME}}</a></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section--cream" id="rsvp">
+      <div class="section__inner section__inner--narrow">
+        <span class="section__number">03</span>
+        <h2 class="section__title">Подтвердите присутствие</h2>
+        <p class="section__lead">Просим подтвердить присутствие не позднее чем за месяц до свадьбы. Укажите, пожалуйста, ваши данные в форме ниже.</p>
+        <form class="rsvp-form" id="rsvp-form">
+          <div class="rsvp-form__row">
+            <label class="rsvp-form__label" for="guest-name">ФИО</label>
+            <input class="rsvp-form__input" id="guest-name" type="text" name="name" placeholder="Иванов Иван Иванович" required>
+          </div>
+          <div class="rsvp-form__row">
+            <label class="rsvp-form__label" for="guest-phone">Номер телефона</label>
+            <input class="rsvp-form__input" id="guest-phone" type="tel" name="phone" placeholder="+7 (999) 000-00-00" required>
+          </div>
+          <div class="rsvp-form__row">
+            <label class="rsvp-form__label" for="guest-email">Почта</label>
+            <input class="rsvp-form__input" id="guest-email" type="email" name="email" placeholder="guest@example.com">
+          </div>
+          <button type="submit" class="rsvp-form__submit">Отправить</button>
+          <p class="rsvp-form__message" id="rsvp-message" role="status" aria-live="polite">Спасибо! Рады, что вы будете с нами. Ждём на празднике!</p>
+        </form>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="footer__inner">
+        <p class="footer__text">С любовью и благодарностью</p>
+        <p class="footer__names">Александр & Дарья</p>
+      </div>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
