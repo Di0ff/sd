@@ -332,8 +332,16 @@ func main() {
 	if placeURL == "" {
 		placeURL = "#"
 	}
+	weddingDateDisplay := strings.TrimSpace(os.Getenv("WEDDING_DATE_DISPLAY"))
+	if weddingDateDisplay == "" {
+		weddingDateDisplay = "22 июля 2026"
+	}
+	weddingTimeDisplay := strings.TrimSpace(os.Getenv("WEDDING_TIME_DISPLAY"))
+	if weddingTimeDisplay == "" {
+		weddingTimeDisplay = "16:30"
+	}
 	fs := http.FileServer(http.Dir(staticDir))
-	mux.Handle("/", indexWithPlace(staticDir, placeName, placeURL, fs))
+	mux.Handle("/", indexWithPlace(staticDir, placeName, placeURL, weddingDateDisplay, weddingTimeDisplay, fs))
 
 	addr := ":" + port
 	log.Printf("слушаем %s, статика: %s", addr, staticDir)
@@ -342,8 +350,8 @@ func main() {
 	}
 }
 
-// indexWithPlace отдаёт главную страницу с подстановкой WEDDING_PLACE_* из env, остальное — через fs.
-func indexWithPlace(staticDir, placeName, placeURL string, fs http.Handler) http.Handler {
+// indexWithPlace отдаёт главную страницу с подстановкой WEDDING_PLACE_* и WEDDING_* из env, остальное — через fs.
+func indexWithPlace(staticDir, placeName, placeURL, weddingDateDisplay, weddingTimeDisplay string, fs http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" && r.URL.Path != "" {
 			fs.ServeHTTP(w, r)
@@ -357,6 +365,8 @@ func indexWithPlace(staticDir, placeName, placeURL string, fs http.Handler) http
 		html := string(data)
 		html = strings.ReplaceAll(html, "{{WEDDING_PLACE_NAME}}", escapeHTML(placeName))
 		html = strings.ReplaceAll(html, "{{WEDDING_PLACE_URL}}", escapeHTML(placeURL))
+		html = strings.ReplaceAll(html, "{{WEDDING_DATE_DISPLAY}}", escapeHTML(weddingDateDisplay))
+		html = strings.ReplaceAll(html, "{{WEDDING_TIME_DISPLAY}}", escapeHTML(weddingTimeDisplay))
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write([]byte(html))
 	})
@@ -392,9 +402,9 @@ func formatExportDate(s string) string {
 	return t.Format("02.01.2006 15:04")
 }
 
-// runReminderLoop раз в сутки проверяет: если сегодня «дата свадьбы − 3 дня», шлёт напоминание гостям с почтой.
+// runReminderLoop раз в сутки проверяет: если сегодня «дата свадьбы − 10 дней», шлёт напоминание гостям с почтой.
 func runReminderLoop(client *resend.Client, fromEmail string, store *rsvpStore, sent *reminderSentStore, weddingDate time.Time) {
-	reminderDay := weddingDate.AddDate(0, 0, -3)
+	reminderDay := weddingDate.AddDate(0, 0, -10)
 	reminderYear, reminderMonth, reminderDayNum := reminderDay.Date()
 
 	sleepUntilNextCheck := func() {
@@ -436,12 +446,12 @@ func runReminderLoop(client *resend.Client, fromEmail string, store *rsvpStore, 
 					toSend = append(toSend, r.Email)
 				}
 			}
-			body := `<p>Привет!</p><p>Напоминаем: через три дня наша свадьба.</p><p>Очень ждём вас!</p>`
+			body := `<p>Привет!</p><p>Напоминаем: через 10 дней наша свадьба.</p><p>Очень ждём вас!</p>`
 			for _, to := range toSend {
 				_, err := client.Emails.Send(&resend.SendEmailRequest{
 					From:    fromEmail,
 					To:      []string{to},
-					Subject: "Через 3 дня — ждём вас!",
+					Subject: "Через 10 дней — ждём вас!",
 					Html:    body,
 				})
 				if err != nil {

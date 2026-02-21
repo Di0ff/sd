@@ -41,31 +41,16 @@
 
   document.head.insertAdjacentHTML('beforeend', '<style>.section.is-visible, .footer.is-visible { opacity: 1 !important; transform: translateY(0) !important; }</style>');
 
-  // Маска телефона: +7 (999) 999-99-99
+  // Маска телефона через IMask
   var phoneInput = document.getElementById('guest-phone');
   if (phoneInput) {
-    phoneInput.addEventListener('input', function () {
-      var v = this.value.replace(/\D/g, '');
-      if (v.length > 0 && (v[0] === '8' || v[0] === '7')) v = '7' + v.slice(1);
-      else if (v.length > 0) v = '7' + v;
-      v = v.slice(0, 11);
-      if (v.length === 0) {
-        this.value = '';
-        return;
+    IMask(
+      phoneInput,
+      {
+        mask: '+{7} (000) 000-00-00',
+        lazy: true
       }
-      var s = '+7';
-      if (v.length > 1) s += ' (' + v.slice(1, 4);
-      if (v.length >= 4) s += ') ' + v.slice(4, 7);
-      if (v.length >= 7) s += '-' + v.slice(7, 9);
-      if (v.length >= 9) s += '-' + v.slice(9, 11);
-      this.value = s;
-    });
-    phoneInput.addEventListener('keydown', function (e) {
-      if (e.key === 'Backspace' && this.value.replace(/\D/g, '').length <= 1) {
-        this.value = '';
-        e.preventDefault();
-      }
-    });
+    );
   }
 
   // Маска почты: только допустимые символы

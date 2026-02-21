@@ -125,11 +125,14 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   width: 100%;
   max-width: 880px;
   margin: 0 auto;
-  padding: 4rem 2rem 2rem;
+  padding-top: 60vh;
+  padding-left: 2rem;
+  padding-right: 2rem;
+  padding-bottom: 2rem;
 }
 
 .hero__content {
@@ -366,6 +369,13 @@ body {
   font-size: 1.15rem;
   font-weight: 400;
   letter-spacing: 0.03em;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.detail__link {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 /* ----- RSVP Form ----- */

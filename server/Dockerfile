@@ -1,10 +1,10 @@
 # Сборка бэкенда (контекст сборки — корень проекта: docker build -f server/Dockerfile .)
-FROM golang:1.23-alpine AS builder
+FROM golang:1.24-alpine AS builder
 WORKDIR /build
 COPY server/ ./server/
 RUN cd server && go mod download && go build -o ../wedding-rsvp .
 
-FROM alpine:3.19
+FROM alpine:3.21
 RUN apk add --no-cache ca-certificates
 WORKDIR /app
 COPY --from=builder /build/wedding-rsvp .
