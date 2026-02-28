@@ -765,17 +765,13 @@ func handleTelegramWebhook(tg *tgClient, store *tgUserStore, placeURL string) ht
 
 		// Обработка /start
 		if text == "/start" {
-			// Отправляем сообщение с Web App кнопкой
-			url := placeURL
-			if placeURL == "#" {
-				// Если URL не задан, используем базовый URL сайта
-				url = "/"
-			}
+			// URL для Web App — всегда сайт, а не карта
+			webAppURL := "https://alexandr-i-daria.ru"
 			
 			reply := "🎉 *Привет!*\n\nЯ бот свадьбы Александра и Дарьи.\n\nНажмите кнопку ниже, чтобы заполнить форму RSVP и подтвердить своё присутствие:"
 			
 			// Отправляем текст с кнопкой Web App
-			tg.sendWebApp(chatID, reply, url, "📝 Заполнить RSVP")
+			tg.sendWebApp(chatID, reply, webAppURL, "📝 Заполнить RSVP")
 			w.WriteHeader(http.StatusOK)
 			return
 		}
