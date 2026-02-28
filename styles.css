@@ -58,27 +58,6 @@ body.telegram-webapp .hero__inner {
   min-height: 100vh;
 }
 
-/* Скрываем секции до загрузки JS */
-.section {
-  opacity: 0;
-  transform: translateY(24px);
-}
-
-.section.is-visible {
-  opacity: 1 !important;
-  transform: translateY(0) !important;
-}
-
-.footer {
-  opacity: 0;
-  transform: translateY(24px);
-}
-
-.footer.is-visible {
-  opacity: 1 !important;
-  transform: translateY(0) !important;
-}
-
 /* ----- Боковые узоры на всю высоту ----- */
 .side-pattern {
   position: fixed;
