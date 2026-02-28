@@ -458,6 +458,9 @@ func main() {
 		if guestCount < 1 {
 			guestCount = 1
 		}
+		if guestCount > 20 {
+			guestCount = 20
+		}
 
 		if name == "" || len(name) > 200 {
 			http.Error(w, `{"error":"name required, max 200 chars"}`, http.StatusBadRequest)
