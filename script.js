@@ -66,18 +66,15 @@
   }, observerOptions);
 
   document.querySelectorAll('.section').forEach(function (section) {
-    section.style.opacity = '0';
-    section.style.transform = 'translateY(24px)';
     section.style.transition = 'opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1)';
     observer.observe(section);
   });
 
-  document.querySelector('.footer').style.opacity = '0';
-  document.querySelector('.footer').style.transform = 'translateY(24px)';
-  document.querySelector('.footer').style.transition = 'opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1)';
-  observer.observe(document.querySelector('.footer'));
-
-  document.head.insertAdjacentHTML('beforeend', '<style>.section.is-visible, .footer.is-visible { opacity: 1 !important; transform: translateY(0) !important; }</style>');
+  var footer = document.querySelector('.footer');
+  if (footer) {
+    footer.style.transition = 'opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1)';
+    observer.observe(footer);
+  }
 
   // Маска телефона через IMask
   var phoneInput = document.getElementById('guest-phone');
