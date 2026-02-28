@@ -481,11 +481,24 @@ func main() {
 		// Сохраняем chat_id из формы (если передан)
 		if tgEnabled && tg != nil && tgStore != nil && body.TelegramChatID != nil {
 			go func() {
-				_ = tgStore.save(tgUser{
-					ChatID: *body.TelegramChatID,
-					Phone:  phone,
-					Name:   name,
-				})
+				// Сначала попробуем найти существующего пользователя по chat_id
+				users, _ := tgStore.list()
+				found := false
+				for _, u := range users {
+					if u.ChatID == *body.TelegramChatID {
+						found = true
+						break
+					}
+				}
+				// Если не найден или номер пустой — обновляем/сохраняем
+				if !found || phone != "" {
+					_ = tgStore.save(tgUser{
+						ChatID: *body.TelegramChatID,
+						Phone:  phone,
+						Name:   name,
+					})
+					log.Printf("TG: сохранён пользователь chat_id=%d, phone=%s", *body.TelegramChatID, phone)
+				}
 			}()
 		}
 
