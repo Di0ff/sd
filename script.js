@@ -12,6 +12,9 @@
 
     tg.ready();
     tg.expand();
+    
+    // Добавляем класс для Telegram Web App
+    document.body.classList.add('telegram-webapp');
 
     // Сохраняем данные пользователя
     if (tg.initDataUnsafe && tg.initDataUnsafe.user) {

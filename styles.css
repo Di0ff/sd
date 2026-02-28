@@ -41,6 +41,19 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Telegram Web App — учитываем их header */
+body.telegram-webapp {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+body.telegram-webapp .hero {
+  min-height: calc(100vh - env(safe-area-inset-top, 0px));
+}
+
+body.telegram-webapp .hero__inner {
+  padding-top: 50vh;
+}
+
 .page {
   min-height: 100vh;
 }
