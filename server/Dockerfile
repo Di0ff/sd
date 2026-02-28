@@ -8,7 +8,7 @@ FROM alpine:3.21
 RUN apk add --no-cache ca-certificates
 WORKDIR /app
 COPY --from=builder /build/wedding-rsvp .
-COPY index.html styles.css script.js magic-ring_14234767.png ./static/
+COPY index.html styles.css script.js cancel.html magic-ring_14234767.png ./static/
 COPY ["2026-02-02 19.31.22.jpg", "./static/"]
 
 ENV STATIC_DIR=/app/static

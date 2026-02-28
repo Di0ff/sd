@@ -504,7 +504,18 @@ func main() {
 
 		// Гостю — тёплое короткое письмо (если указал почту)
 		if email != "" {
+			cancelURL := placeURL
+			if cancelURL == "#" {
+				cancelURL = "https://alexandr-i-daria.ru/cancel.html?email=" + email
+			} else {
+				cancelURL = "https://alexandr-i-daria.ru/cancel.html?email=" + email
+			}
+			
 			thankHTML := `<p>Привет!</p><p>Мы получили ваш ответ и очень рады, что вы будете с нами.</p><p>Ждём встречи, обнимаем.</p>`
+			thankHTML += `<p style="margin-top: 1.5rem; font-size: 0.85rem; color: #7a6565;">`
+			thankHTML += `Если ваши планы изменятся, вы можете <a href="` + cancelURL + `" style="color: #d08888;">отменить участие здесь</a>.`
+			thankHTML += `</p>`
+			
 			_, _ = client.Emails.Send(&resend.SendEmailRequest{
 				From:    fromEmail,
 				To:      []string{email},
@@ -626,8 +637,14 @@ func main() {
 		}
 	})
 
+	// API для отмены RSVP
+	mux.HandleFunc("/api/cancel", handleCancel(store))
+
 	fs := http.FileServer(http.Dir(staticDir))
 	mux.Handle("/", indexWithPlace(staticDir, placeName, placeURL, weddingDateDisplay, weddingTimeDisplay, fs))
+	mux.Handle("/cancel.html", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, staticDir+"/cancel.html")
+	}))
 
 	addr := ":" + port
 	log.Printf("слушаем %s, статика: %s", addr, staticDir)
@@ -860,7 +877,7 @@ func handleTelegramWebhook(tg *tgClient, store *tgUserStore, placeURL string, rs
 			// URL для Web App — всегда сайт, а не карта
 			webAppURL := "https://alexandr-i-daria.ru"
 			
-			reply := "🎉 *Привет!*\n\nМы очень рады, что вы с нами! 💕\n\nПожалуйста, заполните небольшую форму — это поможет нам всё организовать наилучшим образом:\n\nНажмите на кнопку ниже:"
+			reply := "🎉 *Привет!*\n\nМы очень рады, что вы с нами! 💕\n\nПожалуйста, заполните небольшую форму — это поможет нам всё организовать наилучшим образом.\n\nНажмите на кнопку ниже."
 			
 			// Отправляем текст с кнопкой Web App
 			tg.sendWebApp(chatID, reply, webAppURL, "🎊 Я приду!")
@@ -997,12 +1014,70 @@ func cancelRSVPByChatID(rsvpStore *rsvpStore, tgStore *tgUserStore, chatID int64
 			newList = append(newList, r)
 		}
 	}
-	
+
 	// Сохраняем обновлённый список
 	data, err = json.MarshalIndent(newList, "", "  ")
 	if err != nil {
 		return err
 	}
-	
+
 	return os.WriteFile(rsvpStore.path, data, 0644)
+}
+
+// handleCancel обрабатывает отмену RSVP по email
+func handleCancel(store *rsvpStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Email string `json:"email"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid json"}`, http.StatusBadRequest)
+			return
+		}
+
+		email := strings.TrimSpace(strings.ToLower(req.Email))
+		if email == "" {
+			http.Error(w, `{"error":"email required"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Находим и удаляем RSVP по email
+		store.mu.Lock()
+		defer store.mu.Unlock()
+
+		var list []storedRSVP
+		data, err := os.ReadFile(store.path)
+		if err == nil {
+			_ = json.Unmarshal(data, &list)
+		}
+
+		// Фильтруем - удаляем записи с этим email
+		var newList []storedRSVP
+		for _, r := range list {
+			if strings.ToLower(strings.TrimSpace(r.Email)) != email {
+				newList = append(newList, r)
+			}
+		}
+
+		// Сохраняем обновлённый список
+		data, err = json.MarshalIndent(newList, "", "  ")
+		if err != nil {
+			http.Error(w, `{"error":"failed to save"}`, http.StatusInternalServerError)
+			return
+		}
+
+		if err := os.WriteFile(store.path, data, 0644); err != nil {
+			http.Error(w, `{"error":"failed to save"}`, http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true}`))
+	}
 }

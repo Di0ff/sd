@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Отмена RSVP — Свадьба Александра и Дарьи</title>
+  <link rel="icon" href="magic-ring_14234767.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Montserrat:wght@200;300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="side-pattern side-pattern--left" aria-hidden="true"></div>
+  <div class="side-pattern side-pattern--right" aria-hidden="true"></div>
+
+  <div class="page">
+    <section class="section section--cream" style="min-height: 100vh; display: flex; align-items: center;">
+      <div class="section__inner section__inner--narrow">
+        <h2 class="section__title">Отмена RSVP</h2>
+        
+        <div id="cancel-form-container">
+          <p class="section__lead">Если ваши планы изменились, вы можете отменить своё участие в нашем празднике.</p>
+          
+          <form class="rsvp-form" id="cancel-form">
+            <div class="rsvp-form__row">
+              <label class="rsvp-form__label" for="cancel-email">Ваша почта</label>
+              <input class="rsvp-form__input" id="cancel-email" type="email" name="email" placeholder="guest@example.com" required>
+            </div>
+            
+            <button type="submit" class="rsvp-form__submit" style="background: linear-gradient(180deg, #d08888 0%, #c07878 100%); border-color: #d08888;">Отменить участие</button>
+            
+            <p class="rsvp-form__message" id="cancel-message" role="status" aria-live="polite"></p>
+          </form>
+          
+          <p style="margin-top: 2rem; font-size: 0.85rem; color: var(--gray); text-align: center;">
+            Если передумаете — сможете заполнить форму снова в любое время.
+          </p>
+        </div>
+        
+        <div id="cancel-success" style="display: none; text-align: center;">
+          <p style="font-size: 3rem; margin-bottom: 1rem;">✅</p>
+          <p class="section__lead" style="margin-bottom: 0.5rem;">Ваша заявка отменена.</p>
+          <p style="color: var(--gray);">Если передумаете — можете заполнить форму снова!</p>
+          <a href="/" style="display: inline-block; margin-top: 1.5rem; color: var(--gold); text-decoration: none; border-bottom: 1px solid var(--gold); padding-bottom: 0.25rem;">Вернуться на сайт</a>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+      
+      // Проверяем есть ли email в URL
+      var urlParams = new URLSearchParams(window.location.search);
+      var emailFromUrl = urlParams.get('email');
+      
+      var emailInput = document.getElementById('cancel-email');
+      if (emailFromUrl && emailInput) {
+        emailInput.value = decodeURIComponent(emailFromUrl);
+      }
+      
+      // Обработка формы
+      var form = document.getElementById('cancel-form');
+      var message = document.getElementById('cancel-message');
+      var formContainer = document.getElementById('cancel-form-container');
+      var successContainer = document.getElementById('cancel-success');
+      
+      if (form && message) {
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          
+          var email = emailInput.value.trim();
+          if (!email) return;
+          
+          fetch('/api/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email })
+          })
+          .then(function (res) {
+            return res.json();
+          })
+          .then(function (data) {
+            if (data.ok) {
+              // Показываем успех
+              formContainer.style.display = 'none';
+              successContainer.style.display = 'block';
+            } else {
+              message.textContent = data.error || 'Не удалось отменить. Попробуйте позже.';
+              message.classList.add('rsvp-form__message--error');
+              message.classList.add('is-visible');
+            }
+          })
+          .catch(function (err) {
+            message.textContent = 'Не удалось отменить. Попробуйте позже или свяжитесь с нами.';
+            message.classList.add('rsvp-form__message--error');
+            message.classList.add('is-visible');
+          });
+        });
+      }
+    })();
+  </script>
+</body>
+</html>
