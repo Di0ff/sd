@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -21,17 +24,183 @@ const (
 	rateLimitWindow = time.Minute // в минуту с одного IP
 )
 
+// Telegram user store
+type tgUserStore struct {
+	mu   sync.Mutex
+	path string
+}
+
+type tgUser struct {
+	ChatID int64  `json:"chat_id"`
+	Phone  string `json:"phone"` // нормализованный (только цифры)
+	Name   string `json:"name"`
+}
+
+func (s *tgUserStore) get(phone string) (*tgUser, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	users, err := s.load()
+	if err != nil {
+		return nil, false
+	}
+	phoneNorm := normalizePhone(phone)
+	for _, u := range users {
+		if u.Phone == phoneNorm {
+			return &u, true
+		}
+	}
+	return nil, false
+}
+
+func (s *tgUserStore) save(user tgUser) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	users, err := s.load()
+	if err != nil {
+		return err
+	}
+	phoneNorm := normalizePhone(user.Phone)
+	// Обновляем или добавляем
+	found := false
+	for i, u := range users {
+		if u.Phone == phoneNorm {
+			users[i] = user
+			found = true
+			break
+		}
+	}
+	if !found {
+		users = append(users, user)
+	}
+	return s.saveUsers(users)
+}
+
+func (s *tgUserStore) load() ([]tgUser, error) {
+	data, err := os.ReadFile(s.path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var users []tgUser
+	if err := json.Unmarshal(data, &users); err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
+func (s *tgUserStore) saveUsers(users []tgUser) error {
+	dir := filepath.Dir(s.path)
+	_ = os.MkdirAll(dir, 0755)
+	data, err := json.MarshalIndent(users, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(s.path, data, 0644)
+}
+
+func (s *tgUserStore) list() ([]tgUser, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.load()
+}
+
+// Telegram client
+type tgClient struct {
+	token  string
+	apiURL string
+}
+
+func newTelegramClient(token string) *tgClient {
+	return &tgClient{
+		token:  token,
+		apiURL: "https://api.telegram.org/bot" + token,
+	}
+}
+
+func (t *tgClient) sendMessage(chatID int64, text, parseMode string) error {
+	url := t.apiURL + "/sendMessage"
+	payload := map[string]interface{}{
+		"chat_id": chatID,
+		"text":    text,
+	}
+	if parseMode != "" {
+		payload["parse_mode"] = parseMode
+	}
+	data, _ := json.Marshal(payload)
+	resp, err := http.Post(url, "application/json", bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("telegram API error: %s", string(body))
+	}
+	return nil
+}
+
+func (t *tgClient) sendWebApp(chatID int64, text, url, buttonText string) error {
+	apiURL := t.apiURL + "/sendMessage"
+	
+	// Keyboard с Web App кнопкой
+	keyboard := map[string]interface{}{
+		"inline_keyboard": [][]map[string]interface{}{
+			{
+				{
+					"text": buttonText,
+					"web_app": map[string]string{
+						"url": url,
+					},
+				},
+			},
+		},
+	}
+	
+	payload := map[string]interface{}{
+		"chat_id":     chatID,
+		"text":        text,
+		"parse_mode":  "Markdown",
+		"reply_markup": keyboard,
+	}
+	
+	data, _ := json.Marshal(payload)
+	resp, err := http.Post(apiURL, "application/json", bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("telegram API error: %s", string(body))
+	}
+	return nil
+}
+
+func normalizePhone(phone string) string {
+	var result strings.Builder
+	for _, r := range phone {
+		if r >= '0' && r <= '9' {
+			result.WriteRune(r)
+		}
+	}
+	return result.String()
+}
+
 type RSVPRequest struct {
-	Name  string `json:"name"`
-	Phone string `json:"phone"`
-	Email string `json:"email"`
+	Name           string `json:"name"`
+	Phone          string `json:"phone"`
+	Email          string `json:"email"`
+	TelegramChatID *int64 `json:"telegram_chat_id,omitempty"`
 }
 
 type storedRSVP struct {
-	Name  string `json:"name"`
-	Phone string `json:"phone"`
-	Email string `json:"email"`
-	At    string `json:"at"`
+	Name           string `json:"name"`
+	Phone          string `json:"phone"`
+	Email          string `json:"email"`
+	TelegramChatID *int64 `json:"telegram_chat_id,omitempty"`
+	At             string `json:"at"`
 }
 
 type rsvpLimiter struct {
@@ -181,17 +350,52 @@ func main() {
 	reminderSentPath := filepath.Join(filepath.Dir(dataPath), "reminder_sent.json")
 	reminderSent := &reminderSentStore{path: reminderSentPath}
 
+	// Telegram
+	tgToken := strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN"))
+	tgEnabled := tgToken != ""
+	var tg *tgClient
+	var tgStore *tgUserStore
+	if tgEnabled {
+		tg = newTelegramClient(tgToken)
+		tgStore = &tgUserStore{path: filepath.Join(filepath.Dir(dataPath), "tg_users.json")}
+		log.Printf("Telegram бот инициализирован")
+	}
+
 	weddingDateStr := strings.TrimSpace(os.Getenv("WEDDING_DATE"))
 	if weddingDateStr != "" {
 		weddingDate, err := time.ParseInLocation("2006-01-02", weddingDateStr, time.Local)
 		if err != nil {
 			log.Printf("WEDDING_DATE неверный формат (нужен 2006-01-02), напоминания отключены: %v", err)
 		} else {
-			go runReminderLoop(client, fromEmail, store, reminderSent, weddingDate)
+			go runReminderLoop(client, fromEmail, store, reminderSent, weddingDate, tg, tgStore)
 		}
 	}
 
+	// Переменные для подстановки в шаблоны
+	placeName := strings.TrimSpace(os.Getenv("WEDDING_PLACE_NAME"))
+	if placeName == "" {
+		placeName = "Название места, город"
+	}
+	placeURL := strings.TrimSpace(os.Getenv("WEDDING_PLACE_URL"))
+	if placeURL == "" {
+		placeURL = "#"
+	}
+	weddingDateDisplay := strings.TrimSpace(os.Getenv("WEDDING_DATE_DISPLAY"))
+	if weddingDateDisplay == "" {
+		weddingDateDisplay = "22 июля 2026"
+	}
+	weddingTimeDisplay := strings.TrimSpace(os.Getenv("WEDDING_TIME_DISPLAY"))
+	if weddingTimeDisplay == "" {
+		weddingTimeDisplay = "16:30"
+	}
+
 	mux := http.NewServeMux()
+
+	// Telegram webhook для регистрации пользователей
+	if tgEnabled {
+		mux.HandleFunc("/api/tg/webhook", handleTelegramWebhook(tg, tgStore, placeURL))
+		mux.HandleFunc("/api/tg/init", handleTelegramInit(tg, tgStore))
+	}
 
 	mux.HandleFunc("/api/rsvp", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -274,7 +478,40 @@ func main() {
 			})
 		}
 
-		_ = store.append(storedRSVP{Name: name, Phone: phone, Email: email, At: time.Now().UTC().Format(time.RFC3339)})
+		// Сохраняем chat_id из формы (если передан)
+		if tgEnabled && tg != nil && tgStore != nil && body.TelegramChatID != nil {
+			go func() {
+				_ = tgStore.save(tgUser{
+					ChatID: *body.TelegramChatID,
+					Phone:  phone,
+					Name:   name,
+				})
+			}()
+		}
+
+		// Отправка приглашения в Telegram (если пользователь зарегистрирован)
+		if tgEnabled && tg != nil && tgStore != nil {
+			if user, found := tgStore.get(phone); found {
+				tgMessage := fmt.Sprintf("🎉 *Привет, %s!*\n\nМы получили ваш ответ и очень рады, что вы будете с нами!\n\n📍 *Детали:*\nДата: %s\nВремя: %s\nМесто: %s\n\nЖдём встречи, обнимаем! 💕",
+					escapeMarkdown(name),
+					weddingDateDisplay,
+					weddingTimeDisplay,
+					placeName)
+				go func() {
+					if err := tg.sendMessage(user.ChatID, tgMessage, "Markdown"); err != nil {
+						log.Printf("telegram send to %s: %v", name, err)
+					}
+				}()
+			}
+		}
+
+		_ = store.append(storedRSVP{
+			Name:           name,
+			Phone:          phone,
+			Email:          email,
+			TelegramChatID: body.TelegramChatID,
+			At:             time.Now().UTC().Format(time.RFC3339),
+		})
 
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
@@ -324,22 +561,6 @@ func main() {
 		}
 	})
 
-	placeName := strings.TrimSpace(os.Getenv("WEDDING_PLACE_NAME"))
-	if placeName == "" {
-		placeName = "Название места, город"
-	}
-	placeURL := strings.TrimSpace(os.Getenv("WEDDING_PLACE_URL"))
-	if placeURL == "" {
-		placeURL = "#"
-	}
-	weddingDateDisplay := strings.TrimSpace(os.Getenv("WEDDING_DATE_DISPLAY"))
-	if weddingDateDisplay == "" {
-		weddingDateDisplay = "22 июля 2026"
-	}
-	weddingTimeDisplay := strings.TrimSpace(os.Getenv("WEDDING_TIME_DISPLAY"))
-	if weddingTimeDisplay == "" {
-		weddingTimeDisplay = "16:30"
-	}
 	fs := http.FileServer(http.Dir(staticDir))
 	mux.Handle("/", indexWithPlace(staticDir, placeName, placeURL, weddingDateDisplay, weddingTimeDisplay, fs))
 
@@ -393,6 +614,15 @@ func escapeHTML(s string) string {
 	return s
 }
 
+func escapeMarkdown(s string) string {
+	// Экранируем символы Markdown для Telegram
+	s = strings.ReplaceAll(s, "_", "\\_")
+	s = strings.ReplaceAll(s, "*", "\\*")
+	s = strings.ReplaceAll(s, "[", "\\[")
+	s = strings.ReplaceAll(s, "`", "\\`")
+	return s
+}
+
 // formatExportDate переводит RFC3339 (2026-02-13T18:55:36Z) в вид "13.02.2026 18:55"
 func formatExportDate(s string) string {
 	t, err := time.Parse(time.RFC3339, s)
@@ -402,8 +632,8 @@ func formatExportDate(s string) string {
 	return t.Format("02.01.2006 15:04")
 }
 
-// runReminderLoop раз в сутки проверяет: если сегодня «дата свадьбы − 10 дней», шлёт напоминание гостям с почтой.
-func runReminderLoop(client *resend.Client, fromEmail string, store *rsvpStore, sent *reminderSentStore, weddingDate time.Time) {
+// runReminderLoop раз в сутки проверяет: если сегодня «дата свадьбы − 10 дней», шлёт напоминание гостям с почтой и Telegram.
+func runReminderLoop(client *resend.Client, fromEmail string, store *rsvpStore, sent *reminderSentStore, weddingDate time.Time, tg *tgClient, tgStore *tgUserStore) {
 	reminderDay := weddingDate.AddDate(0, 0, -10)
 	reminderYear, reminderMonth, reminderDayNum := reminderDay.Date()
 
@@ -439,30 +669,195 @@ func runReminderLoop(client *resend.Client, fromEmail string, store *rsvpStore, 
 				sleepUntilNextCheck()
 				continue
 			}
-			var toSend []string
+			var toSendEmail []string
 			for _, r := range list {
 				e := strings.TrimSpace(strings.ToLower(r.Email))
 				if e != "" && !already[e] {
-					toSend = append(toSend, r.Email)
+					toSendEmail = append(toSendEmail, r.Email)
 				}
 			}
-			body := `<p>Привет!</p><p>Напоминаем: через 10 дней наша свадьба.</p><p>Очень ждём вас!</p>`
-			for _, to := range toSend {
+			emailBody := `<p>Привет!</p><p>Напоминаем: через 10 дней наша свадьба.</p><p>Очень ждём вас!</p>`
+			for _, to := range toSendEmail {
 				_, err := client.Emails.Send(&resend.SendEmailRequest{
 					From:    fromEmail,
 					To:      []string{to},
 					Subject: "Через 10 дней — ждём вас!",
-					Html:    body,
+					Html:    emailBody,
 				})
 				if err != nil {
-					log.Printf("напоминание %s: %v", to, err)
+					log.Printf("напоминание email %s: %v", to, err)
 				}
 			}
-			if len(toSend) > 0 {
-				_ = sent.add(toSend)
-				log.Printf("напоминания: отправлено %d гостям", len(toSend))
+			if len(toSendEmail) > 0 {
+				_ = sent.add(toSendEmail)
+				log.Printf("напоминания email: отправлено %d гостям", len(toSendEmail))
+			}
+
+			// Telegram напоминания
+			if tg != nil && tgStore != nil {
+				tgUsers, err := tgStore.list()
+				if err != nil {
+					log.Printf("напоминания TG: не загрузить пользователей: %v", err)
+				} else {
+					tgMessage := "💌 *Напоминание о свадьбе!*\n\nПривет! Напоминаем, что через 10 дней наша свадьба.\n\nОчень ждём вас на празднике!\n\n💕 Александр & Дарья"
+					sentCount := 0
+					for _, user := range tgUsers {
+						if err := tg.sendMessage(user.ChatID, tgMessage, "Markdown"); err != nil {
+							log.Printf("напоминание TG %s: %v", user.Name, err)
+						} else {
+							sentCount++
+						}
+					}
+					if sentCount > 0 {
+						log.Printf("напоминания TG: отправлено %d гостям", sentCount)
+					}
+				}
 			}
 		}
 		sleepUntilNextCheck()
+	}
+}
+
+// Telegram webhook handler
+func handleTelegramWebhook(tg *tgClient, store *tgUserStore, placeURL string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var update struct {
+			Message *struct {
+				Chat struct {
+					ID   int64  `json:"id"`
+					Type string `json:"type"`
+				} `json:"chat"`
+				From *struct {
+					ID        int64  `json:"id"`
+					FirstName string `json:"first_name"`
+					Username  string `json:"username"`
+				} `json:"from"`
+				Text string `json:"text"`
+			} `json:"message"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if update.Message == nil {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		chatID := update.Message.Chat.ID
+		userName := ""
+		if update.Message.From != nil {
+			if update.Message.From.Username != "" {
+				userName = "@" + update.Message.From.Username
+			} else {
+				userName = update.Message.From.FirstName
+			}
+		}
+
+		text := update.Message.Text
+
+		// Обработка /start
+		if text == "/start" {
+			// Отправляем сообщение с Web App кнопкой
+			url := placeURL
+			if placeURL == "#" {
+				// Если URL не задан, используем базовый URL сайта
+				url = "/"
+			}
+			
+			reply := "🎉 *Привет!*\n\nЯ бот свадьбы Александра и Дарьи.\n\nНажмите кнопку ниже, чтобы заполнить форму RSVP и подтвердить своё присутствие:"
+			
+			// Отправляем текст с кнопкой Web App
+			tg.sendWebApp(chatID, reply, url, "📝 Заполнить RSVP")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// Обработка /phone +79990000000
+		if strings.HasPrefix(text, "/phone ") {
+			phone := strings.TrimSpace(strings.TrimPrefix(text, "/phone "))
+			if phone != "" {
+				_ = store.save(tgUser{
+					ChatID: chatID,
+					Phone:  phone,
+					Name:   userName,
+				})
+				reply := fmt.Sprintf("✅ *Отлично!*\n\nВаш номер %s сохранён.\n\nТеперь, когда вы заполните форму RSVP, мы отправим вам приглашение здесь!", phone)
+				_ = tg.sendMessage(chatID, reply, "Markdown")
+			} else {
+				_ = tg.sendMessage(chatID, "❌ Пожалуйста, укажите номер после `/phone`", "")
+			}
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// Обработка номера телефона в любом формате (сохраняем)
+		phoneDigits := normalizePhone(text)
+		if len(phoneDigits) >= 10 {
+			_ = store.save(tgUser{
+				ChatID: chatID,
+				Phone:  text,
+				Name:   userName,
+			})
+			reply := fmt.Sprintf("✅ *Отлично!*\n\nВаш номер %s сохранён.\n\nТеперь, когда вы заполните форму RSVP, мы отправим вам приглашение здесь!", text)
+			_ = tg.sendMessage(chatID, reply, "Markdown")
+		}
+
+		w.WriteHeader(http.StatusOK)
+	}
+}
+
+// handleTelegramInit — сохранение chat_id при открытии сайта из Telegram
+func handleTelegramInit(tg *tgClient, store *tgUserStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			ChatID    int64  `json:"chat_id"`
+			FirstName string `json:"first_name"`
+			Username  string `json:"username"`
+			Phone     string `json:"phone"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid json"}`, http.StatusBadRequest)
+			return
+		}
+
+		if req.ChatID == 0 {
+			http.Error(w, `{"error":"chat_id required"}`, http.StatusBadRequest)
+			return
+		}
+
+		name := req.FirstName
+		if req.Username != "" {
+			name = "@" + req.Username
+		}
+		if name == "" {
+			name = "Telegram User"
+		}
+
+		if err := store.save(tgUser{
+			ChatID: req.ChatID,
+			Phone:  req.Phone,
+			Name:   name,
+		}); err != nil {
+			log.Printf("tg init save: %v", err)
+			http.Error(w, `{"error":"failed to save"}`, http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true}`))
 	}
 }

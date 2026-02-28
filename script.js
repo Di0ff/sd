@@ -1,6 +1,41 @@
 (function () {
   'use strict';
 
+  // Telegram Web App
+  var tg = window.Telegram && window.Telegram.WebApp;
+  var tgChatId = null;
+  var tgUser = null;
+
+  // Инициализация Telegram
+  function initTelegram() {
+    if (!tg) return;
+
+    tg.ready();
+    tg.expand();
+
+    // Сохраняем данные пользователя
+    if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+      tgUser = tg.initDataUnsafe.user;
+      tgChatId = tgUser.id;
+
+      // Отправляем chat_id на бэкенд
+      fetch('/api/tg/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: tgChatId,
+          first_name: tgUser.first_name,
+          username: tgUser.username,
+          phone: ''
+        })
+      }).catch(function(err) {
+        console.log('Telegram init error:', err);
+      });
+    }
+  }
+
+  initTelegram();
+
   // Плавная прокрутка по якорям
   document.querySelectorAll('a[href^="#"]').forEach(function (anchor) {
     anchor.addEventListener('click', function (e) {
@@ -75,7 +110,14 @@
       var phone = phoneInput && phoneInput.value ? phoneInput.value.trim() : '';
       var email = emailInput && emailInput.value ? emailInput.value.trim() : '';
       if (!name || !phoneRaw) return;
-      var payload = { name: name, phone: phone, email: email || '' };
+      
+      var payload = { 
+        name: name, 
+        phone: phone, 
+        email: email || '',
+        telegram_chat_id: tgChatId || null
+      };
+      
       fetch('/api/rsvp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -86,6 +128,13 @@
           message.classList.remove('rsvp-form__message--error');
           message.classList.add('is-visible');
           form.reset();
+          
+          // Закрываем Web App после успешной отправки
+          if (tg && tgChatId) {
+            setTimeout(function() {
+              tg.close();
+            }, 2000);
+          }
           return;
         }
         return res.json().then(function (data) {
@@ -96,7 +145,7 @@
       }).catch(function (err) {
         try {
           var list = JSON.parse(localStorage.getItem('wedding_rsvp') || '[]');
-          list.push({ name: name, phone: phone, phoneRaw: phoneRaw, email: email || undefined, at: new Date().toISOString() });
+          list.push({ name: name, phone: phone, phoneRaw: phoneRaw, email: email || undefined, telegram_chat_id: tgChatId || null, at: new Date().toISOString() });
           localStorage.setItem('wedding_rsvp', JSON.stringify(list));
         } catch (e) {}
         message.textContent = 'Не удалось отправить. Попробуйте позже или свяжитесь с нами по телефону.';

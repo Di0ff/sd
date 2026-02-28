@@ -11,6 +11,7 @@ services:
       - STATIC_DIR=/app/static
       - PORT=8080
       - RSVP_DATA_PATH=/app/data/rsvps.json
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
     volumes:
       - rsvp-data:/app/data
 volumes:
