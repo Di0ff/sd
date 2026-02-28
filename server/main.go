@@ -491,7 +491,9 @@ func main() {
 
 		// Отправка приглашения в Telegram (если пользователь зарегистрирован)
 		if tgEnabled && tg != nil && tgStore != nil {
+			log.Printf("RSVP: поиск пользователя по телефону: %s", phone)
 			if user, found := tgStore.get(phone); found {
+				log.Printf("RSVP: пользователь найден, chat_id=%d, отправка в Telegram", user.ChatID)
 				tgMessage := fmt.Sprintf("🎉 *Привет, %s!*\n\nМы получили ваш ответ и очень рады, что вы будете с нами!\n\n📍 *Детали:*\nДата: %s\nВремя: %s\nМесто: %s\n\nЖдём встречи, обнимаем! 💕",
 					escapeMarkdown(name),
 					weddingDateDisplay,
@@ -500,8 +502,12 @@ func main() {
 				go func() {
 					if err := tg.sendMessage(user.ChatID, tgMessage, "Markdown"); err != nil {
 						log.Printf("telegram send to %s: %v", name, err)
+					} else {
+						log.Printf("telegram отправлено %s (chat_id=%d)", name, user.ChatID)
 					}
 				}()
+			} else {
+				log.Printf("RSVP: пользователь НЕ найден в tg_users.json")
 			}
 		}
 

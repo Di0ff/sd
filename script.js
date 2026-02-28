@@ -102,13 +102,6 @@
           message.classList.remove('rsvp-form__message--error');
           message.classList.add('is-visible');
           form.reset();
-          
-          // Закрываем Web App после успешной отправки
-          if (tg && tgChatId) {
-            setTimeout(function() {
-              tg.close();
-            }, 2000);
-          }
           return;
         }
         return res.json().then(function (data) {
