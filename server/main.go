@@ -534,13 +534,17 @@ func main() {
 			// Теперь ищем и отправляем
 			if user, found := tgStore.get(phone); found {
 				log.Printf("RSVP: пользователь найден, chat_id=%d, отправка в Telegram", user.ChatID)
-				tgMessage := fmt.Sprintf("✨ *Спасибо, %s!*\n\nМы так рады, что вы будете с нами! 💕\n\n📍 *Детали:*\nДата: %s\nВремя: %s\nМесто: %s\n\nДо встречи на празднике!",
+				
+				// Сообщение с кнопкой отмены
+				reply := fmt.Sprintf("✨ *Спасибо, %s!*\n\nМы так рады, что вы будете с нами! 💕\n\n📍 *Детали:*\nДата: %s\nВремя: %s\nМесто: %s\n\nДо встречи на празднике!\n\n_Если ваши планы изменятся, пожалуйста, сообщите нам об этом — просто нажмите на кнопку ниже._",
 					escapeMarkdown(name),
 					weddingDateDisplay,
 					weddingTimeDisplay,
 					placeName)
+				
+				// Отправляем с кнопкой отмены
 				go func() {
-					if err := tg.sendMessage(user.ChatID, tgMessage, "Markdown"); err != nil {
+					if err := tg.sendWebAppWithCancel(user.ChatID, reply, "https://alexandr-i-daria.ru", "✏️ Изменить данные", "❌ Отменить RSVP"); err != nil {
 						log.Printf("telegram send to %s: %v", name, err)
 					} else {
 						log.Printf("telegram отправлено %s (chat_id=%d)", name, user.ChatID)
@@ -553,13 +557,16 @@ func main() {
 				log.Printf("RSVP: поиск пользователя по телефону: %s", phone)
 				if user, found := tgStore.get(phone); found {
 					log.Printf("RSVP: пользователь найден, chat_id=%d, отправка в Telegram", user.ChatID)
-					tgMessage := fmt.Sprintf("✨ *Спасибо, %s!*\n\nМы так рады, что вы будете с нами! 💕\n\n📍 *Детали:*\nДата: %s\nВремя: %s\nМесто: %s\n\nДо встречи на празднике!",
+					
+					// Сообщение с кнопкой отмены
+					reply := fmt.Sprintf("✨ *Спасибо, %s!*\n\nМы так рады, что вы будете с нами! 💕\n\n📍 *Детали:*\nДата: %s\nВремя: %s\nМесто: %s\n\nДо встречи на празднике!\n\n_Если ваши планы изменятся, пожалуйста, сообщите нам об этом — просто нажмите на кнопку ниже._",
 						escapeMarkdown(name),
 						weddingDateDisplay,
 						weddingTimeDisplay,
 						placeName)
+					
 					go func() {
-						if err := tg.sendMessage(user.ChatID, tgMessage, "Markdown"); err != nil {
+						if err := tg.sendWebAppWithCancel(user.ChatID, reply, "https://alexandr-i-daria.ru", "✏️ Изменить данные", "❌ Отменить RSVP"); err != nil {
 							log.Printf("telegram send to %s: %v", name, err)
 						} else {
 							log.Printf("telegram отправлено %s (chat_id=%d)", name, user.ChatID)
@@ -863,8 +870,8 @@ func handleTelegramWebhook(tg *tgClient, store *tgUserStore, placeURL string, rs
 			
 			reply := "🎉 *Привет!*\n\nМы очень рады, что вы с нами! 💕\n\nПожалуйста, заполните небольшую форму — это поможет нам всё организовать наилучшим образом:\n\nНажмите на кнопку ниже:"
 			
-			// Отправляем текст с кнопкой Web App и кнопкой отмены
-			tg.sendWebAppWithCancel(chatID, reply, webAppURL, "🎊 Я приду!", "❌ Отменить RSVP")
+			// Отправляем текст с кнопкой Web App
+			tg.sendWebApp(chatID, reply, webAppURL, "🎊 Я приду!")
 			w.WriteHeader(http.StatusOK)
 			return
 		}
