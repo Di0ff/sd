@@ -178,20 +178,12 @@ func (t *tgClient) sendWebApp(chatID int64, text, url, buttonText string) error 
 	return nil
 }
 
-func (t *tgClient) sendWebAppWithCancel(chatID int64, text, url, confirmText, cancelText string) error {
+func (t *tgClient) sendMessageWithCancel(chatID int64, text, cancelText string) error {
 	apiURL := t.apiURL + "/sendMessage"
 
-	// Keyboard с двумя кнопками: подтвердить + отмена
+	// Keyboard с кнопкой отмены
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{
-				{
-					"text": confirmText,
-					"web_app": map[string]string{
-						"url": url,
-					},
-				},
-			},
 			{
 				{
 					"text": cancelText,
@@ -544,7 +536,7 @@ func main() {
 				
 				// Отправляем с кнопкой отмены
 				go func() {
-					if err := tg.sendWebAppWithCancel(user.ChatID, reply, "https://alexandr-i-daria.ru", "✏️ Изменить данные", "❌ Отменить RSVP"); err != nil {
+					if err := tg.sendMessageWithCancel(user.ChatID, reply, "❌ Отменить"); err != nil {
 						log.Printf("telegram send to %s: %v", name, err)
 					} else {
 						log.Printf("telegram отправлено %s (chat_id=%d)", name, user.ChatID)
@@ -566,7 +558,7 @@ func main() {
 						placeName)
 					
 					go func() {
-						if err := tg.sendWebAppWithCancel(user.ChatID, reply, "https://alexandr-i-daria.ru", "✏️ Изменить данные", "❌ Отменить RSVP"); err != nil {
+						if err := tg.sendMessageWithCancel(user.ChatID, reply, "❌ Отменить"); err != nil {
 							log.Printf("telegram send to %s: %v", name, err)
 						} else {
 							log.Printf("telegram отправлено %s (chat_id=%d)", name, user.ChatID)
@@ -839,7 +831,7 @@ func handleTelegramWebhook(tg *tgClient, store *tgUserStore, placeURL string, rs
 				answerCallback(tg, update.CallbackQuery.ID)
 				
 				// Отправляем подтверждение отмены
-				_ = tg.sendMessage(chatID, "✅ Ваша заявка отменена.\n\nЕсли передумаете — можете заполнить форму снова!", "")
+				_ = tg.sendMessage(chatID, "✅ Отменено.\n\nЕсли передумаете — заполните форму снова, мы будем рады! 💕", "")
 			}
 			
 			w.WriteHeader(http.StatusOK)
