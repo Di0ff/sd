@@ -45,7 +45,7 @@ func (s *tgUserStore) get(phone string) (*tgUser, bool) {
 	}
 	phoneNorm := normalizePhone(phone)
 	for _, u := range users {
-		if u.Phone == phoneNorm {
+		if normalizePhone(u.Phone) == phoneNorm {
 			return &u, true
 		}
 	}
