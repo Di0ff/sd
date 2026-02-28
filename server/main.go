@@ -478,33 +478,17 @@ func main() {
 			})
 		}
 
-		// Сохраняем chat_id из формы (если передан)
+		// Сохраняем chat_id из формы (если передан) + отправляем Telegram
 		if tgEnabled && tg != nil && tgStore != nil && body.TelegramChatID != nil {
-			go func() {
-				// Сначала попробуем найти существующего пользователя по chat_id
-				users, _ := tgStore.list()
-				found := false
-				for _, u := range users {
-					if u.ChatID == *body.TelegramChatID {
-						found = true
-						break
-					}
-				}
-				// Если не найден или номер пустой — обновляем/сохраняем
-				if !found || phone != "" {
-					_ = tgStore.save(tgUser{
-						ChatID: *body.TelegramChatID,
-						Phone:  phone,
-						Name:   name,
-					})
-					log.Printf("TG: сохранён пользователь chat_id=%d, phone=%s", *body.TelegramChatID, phone)
-				}
-			}()
-		}
-
-		// Отправка приглашения в Telegram (если пользователь зарегистрирован)
-		if tgEnabled && tg != nil && tgStore != nil {
-			log.Printf("RSVP: поиск пользователя по телефону: %s", phone)
+			// Сначала сохраняем/обновляем пользователя
+			_ = tgStore.save(tgUser{
+				ChatID: *body.TelegramChatID,
+				Phone:  phone,
+				Name:   name,
+			})
+			log.Printf("TG: сохранён пользователь chat_id=%d, phone=%s", *body.TelegramChatID, phone)
+			
+			// Теперь ищем и отправляем
 			if user, found := tgStore.get(phone); found {
 				log.Printf("RSVP: пользователь найден, chat_id=%d, отправка в Telegram", user.ChatID)
 				tgMessage := fmt.Sprintf("🎉 *Привет, %s!*\n\nМы получили ваш ответ и очень рады, что вы будете с нами!\n\n📍 *Детали:*\nДата: %s\nВремя: %s\nМесто: %s\n\nЖдём встречи, обнимаем! 💕",
@@ -519,8 +503,28 @@ func main() {
 						log.Printf("telegram отправлено %s (chat_id=%d)", name, user.ChatID)
 					}
 				}()
-			} else {
-				log.Printf("RSVP: пользователь НЕ найден в tg_users.json")
+			}
+		} else {
+			// Отправка приглашения в Telegram (если пользователь уже был в базе)
+			if tgEnabled && tg != nil && tgStore != nil {
+				log.Printf("RSVP: поиск пользователя по телефону: %s", phone)
+				if user, found := tgStore.get(phone); found {
+					log.Printf("RSVP: пользователь найден, chat_id=%d, отправка в Telegram", user.ChatID)
+					tgMessage := fmt.Sprintf("🎉 *Привет, %s!*\n\nМы получили ваш ответ и очень рады, что вы будете с нами!\n\n📍 *Детали:*\nДата: %s\nВремя: %s\nМесто: %s\n\nЖдём встречи, обнимаем! 💕",
+						escapeMarkdown(name),
+						weddingDateDisplay,
+						weddingTimeDisplay,
+						placeName)
+					go func() {
+						if err := tg.sendMessage(user.ChatID, tgMessage, "Markdown"); err != nil {
+							log.Printf("telegram send to %s: %v", name, err)
+						} else {
+							log.Printf("telegram отправлено %s (chat_id=%d)", name, user.ChatID)
+						}
+					}()
+				} else {
+					log.Printf("RSVP: пользователь НЕ найден в tg_users.json")
+				}
 			}
 		}
 
