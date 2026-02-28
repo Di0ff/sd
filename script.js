@@ -50,35 +50,6 @@
     });
   });
 
-  // Лёгкое появление секций при скролле
-  var observerOptions = {
-    root: null,
-    rootMargin: '0px 0px -15% 0px',
-    threshold: 0
-  };
-
-  var observer = new IntersectionObserver(function (entries) {
-    entries.forEach(function (entry) {
-      if (entry.isIntersecting) {
-        entry.target.classList.add('is-visible');
-      }
-    });
-  }, observerOptions);
-
-  document.querySelectorAll('.section').forEach(function (section) {
-    section.style.opacity = '0';
-    section.style.transform = 'translateY(24px)';
-    section.style.transition = 'opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1)';
-    observer.observe(section);
-  });
-
-  document.querySelector('.footer').style.opacity = '0';
-  document.querySelector('.footer').style.transform = 'translateY(24px)';
-  document.querySelector('.footer').style.transition = 'opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1)';
-  observer.observe(document.querySelector('.footer'));
-
-  document.head.insertAdjacentHTML('beforeend', '<style>.section.is-visible, .footer.is-visible { opacity: 1 !important; transform: translateY(0) !important; }</style>');
-
   // Маска телефона через IMask
   var phoneInput = document.getElementById('guest-phone');
   if (phoneInput) {
