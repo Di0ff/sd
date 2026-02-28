@@ -143,7 +143,7 @@ func (t *tgClient) sendMessage(chatID int64, text, parseMode string) error {
 
 func (t *tgClient) sendWebApp(chatID int64, text, url, buttonText string) error {
 	apiURL := t.apiURL + "/sendMessage"
-	
+
 	// Keyboard с Web App кнопкой
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
@@ -157,14 +157,57 @@ func (t *tgClient) sendWebApp(chatID int64, text, url, buttonText string) error 
 			},
 		},
 	}
-	
+
 	payload := map[string]interface{}{
-		"chat_id":     chatID,
-		"text":        text,
-		"parse_mode":  "Markdown",
+		"chat_id":      chatID,
+		"text":         text,
+		"parse_mode":   "Markdown",
 		"reply_markup": keyboard,
 	}
-	
+
+	data, _ := json.Marshal(payload)
+	resp, err := http.Post(apiURL, "application/json", bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("telegram API error: %s", string(body))
+	}
+	return nil
+}
+
+func (t *tgClient) sendWebAppWithCancel(chatID int64, text, url, confirmText, cancelText string) error {
+	apiURL := t.apiURL + "/sendMessage"
+
+	// Keyboard с двумя кнопками: подтвердить + отмена
+	keyboard := map[string]interface{}{
+		"inline_keyboard": [][]map[string]interface{}{
+			{
+				{
+					"text": confirmText,
+					"web_app": map[string]string{
+						"url": url,
+					},
+				},
+			},
+			{
+				{
+					"text": cancelText,
+					"callback_data": "cancel_rsvp",
+				},
+			},
+		},
+	}
+
+	payload := map[string]interface{}{
+		"chat_id":      chatID,
+		"text":         text,
+		"parse_mode":   "Markdown",
+		"reply_markup": keyboard,
+	}
+
 	data, _ := json.Marshal(payload)
 	resp, err := http.Post(apiURL, "application/json", bytes.NewReader(data))
 	if err != nil {
@@ -393,7 +436,7 @@ func main() {
 
 	// Telegram webhook для регистрации пользователей
 	if tgEnabled {
-		mux.HandleFunc("/api/tg/webhook", handleTelegramWebhook(tg, tgStore, placeURL))
+		mux.HandleFunc("/api/tg/webhook", handleTelegramWebhook(tg, tgStore, placeURL, store))
 		mux.HandleFunc("/api/tg/init", handleTelegramInit(tg, tgStore))
 	}
 
@@ -742,7 +785,7 @@ func runReminderLoop(client *resend.Client, fromEmail string, store *rsvpStore, 
 }
 
 // Telegram webhook handler
-func handleTelegramWebhook(tg *tgClient, store *tgUserStore, placeURL string) http.HandlerFunc {
+func handleTelegramWebhook(tg *tgClient, store *tgUserStore, placeURL string, rsvpStore *rsvpStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -762,10 +805,37 @@ func handleTelegramWebhook(tg *tgClient, store *tgUserStore, placeURL string) ht
 				} `json:"from"`
 				Text string `json:"text"`
 			} `json:"message"`
+			CallbackQuery *struct {
+				ID     string `json:"id"`
+				From   *struct {
+					ID int64 `json:"id"`
+				} `json:"from"`
+				Data string `json:"data"`
+			} `json:"callback_query"`
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		// Обработка callback query (кнопки)
+		if update.CallbackQuery != nil {
+			chatID := update.CallbackQuery.From.ID
+			data := update.CallbackQuery.Data
+			
+			if data == "cancel_rsvp" {
+				// Удаляем RSVP пользователя
+				_ = cancelRSVPByChatID(rsvpStore, store, chatID)
+				
+				// Отвечаем на callback
+				answerCallback(tg, update.CallbackQuery.ID)
+				
+				// Отправляем подтверждение отмены
+				_ = tg.sendMessage(chatID, "✅ Ваша заявка отменена.\n\nЕсли передумаете — можете заполнить форму снова!", "")
+			}
+			
+			w.WriteHeader(http.StatusOK)
 			return
 		}
 
@@ -793,8 +863,8 @@ func handleTelegramWebhook(tg *tgClient, store *tgUserStore, placeURL string) ht
 			
 			reply := "🎉 *Привет!*\n\nМы очень рады, что вы с нами! 💕\n\nПожалуйста, заполните небольшую форму — это поможет нам всё организовать наилучшим образом:\n\nНажмите на кнопку ниже:"
 			
-			// Отправляем текст с кнопкой Web App
-			tg.sendWebApp(chatID, reply, webAppURL, "🎊 Я приду!")
+			// Отправляем текст с кнопкой Web App и кнопкой отмены
+			tg.sendWebAppWithCancel(chatID, reply, webAppURL, "🎊 Я приду!", "❌ Отменить RSVP")
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -879,4 +949,61 @@ func handleTelegramInit(tg *tgClient, store *tgUserStore) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"ok":true}`))
 	}
+}
+
+// answerCallback отвечает на callback query
+func answerCallback(tg *tgClient, callbackID string) {
+	apiURL := tg.apiURL + "/answerCallbackQuery"
+	payload := map[string]interface{}{
+		"callback_query_id": callbackID,
+	}
+	data, _ := json.Marshal(payload)
+	_, _ = http.Post(apiURL, "application/json", bytes.NewReader(data))
+}
+
+// cancelRSVPByChatID удаляет RSVP пользователя по chat_id
+func cancelRSVPByChatID(rsvpStore *rsvpStore, tgStore *tgUserStore, chatID int64) error {
+	// Находим пользователя
+	users, err := tgStore.list()
+	if err != nil {
+		return err
+	}
+	
+	var userPhone string
+	for _, u := range users {
+		if u.ChatID == chatID {
+			userPhone = u.Phone
+			break
+		}
+	}
+	
+	if userPhone == "" {
+		return nil // Пользователь не найден
+	}
+	
+	// Удаляем RSVP из списка
+	rsvpStore.mu.Lock()
+	defer rsvpStore.mu.Unlock()
+	
+	var list []storedRSVP
+	data, err := os.ReadFile(rsvpStore.path)
+	if err == nil {
+		_ = json.Unmarshal(data, &list)
+	}
+	
+	// Фильтруем - удаляем записи с этим телефоном
+	var newList []storedRSVP
+	for _, r := range list {
+		if normalizePhone(r.Phone) != normalizePhone(userPhone) {
+			newList = append(newList, r)
+		}
+	}
+	
+	// Сохраняем обновлённый список
+	data, err = json.MarshalIndent(newList, "", "  ")
+	if err != nil {
+		return err
+	}
+	
+	return os.WriteFile(rsvpStore.path, data, 0644)
 }
