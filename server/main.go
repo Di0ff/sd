@@ -504,17 +504,10 @@ func main() {
 
 		// Гостю — тёплое короткое письмо (если указал почту)
 		if email != "" {
-			cancelURL := placeURL
-			if cancelURL == "#" {
-				cancelURL = "https://alexandr-i-daria.ru/cancel.html?email=" + email
-			} else {
-				cancelURL = "https://alexandr-i-daria.ru/cancel.html?email=" + email
-			}
+			cancelURL := "https://alexandr-i-daria.ru/cancel?email=" + email
 			
 			thankHTML := `<p>Привет!</p><p>Мы получили ваш ответ и очень рады, что вы будете с нами.</p><p>Ждём встречи, обнимаем.</p>`
-			thankHTML += `<p style="margin-top: 1.5rem; font-size: 0.85rem; color: #7a6565;">`
-			thankHTML += `Если ваши планы изменятся, вы можете <a href="` + cancelURL + `" style="color: #d08888;">отменить участие здесь</a>.`
-			thankHTML += `</p>`
+			thankHTML += `<p style="margin-top: 1.5rem;">Если ваши планы изменятся, вы можете <a href="` + cancelURL + `" style="color: #d08888; text-decoration: underline;">отменить здесь</a>.</p>`
 			
 			_, _ = client.Emails.Send(&resend.SendEmailRequest{
 				From:    fromEmail,
@@ -642,7 +635,7 @@ func main() {
 
 	fs := http.FileServer(http.Dir(staticDir))
 	mux.Handle("/", indexWithPlace(staticDir, placeName, placeURL, weddingDateDisplay, weddingTimeDisplay, fs))
-	mux.Handle("/cancel.html", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/cancel", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, staticDir+"/cancel.html")
 	}))
 
