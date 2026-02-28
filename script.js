@@ -73,23 +73,48 @@
   // Форма: отправка на бэк /api/rsvp, при ошибке — сохранение в localStorage
   var form = document.getElementById('rsvp-form');
   var message = document.getElementById('rsvp-message');
+  var submitButton = form ? form.querySelector('.rsvp-form__submit') : null;
+  var isSubmitting = false;
+  
   if (form && message) {
     form.addEventListener('submit', function (e) {
       e.preventDefault();
+      
+      // Защита от повторной отправки
+      if (isSubmitting) return;
+      isSubmitting = true;
+      
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = 'Отправка...';
+        submitButton.style.opacity = '0.7';
+      }
+      
       var nameInput = document.getElementById('guest-name');
       var phoneInput = document.getElementById('guest-phone');
       var emailInput = document.getElementById('guest-email');
+      var guestCountInput = document.getElementById('guest-count');
       var name = nameInput && nameInput.value ? nameInput.value.trim() : '';
       var phoneRaw = phoneInput && phoneInput.value ? phoneInput.value.replace(/\D/g, '') : '';
       var phone = phoneInput && phoneInput.value ? phoneInput.value.trim() : '';
       var email = emailInput && emailInput.value ? emailInput.value.trim() : '';
-      if (!name || !phoneRaw) return;
+      var guestCount = guestCountInput && guestCountInput.value ? parseInt(guestCountInput.value) : 1;
+      if (!name || !phoneRaw) {
+        isSubmitting = false;
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = 'Отправить';
+          submitButton.style.opacity = '1';
+        }
+        return;
+      }
       
       var payload = { 
         name: name, 
         phone: phone, 
         email: email || '',
-        telegram_chat_id: tgChatId || null
+        telegram_chat_id: tgChatId || null,
+        guest_count: guestCount
       };
       
       fetch('/api/rsvp', {
@@ -102,6 +127,12 @@
           message.classList.remove('rsvp-form__message--error');
           message.classList.add('is-visible');
           form.reset();
+          isSubmitting = false;
+          if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = 'Отправлено';
+            submitButton.style.opacity = '1';
+          }
           return;
         }
         return res.json().then(function (data) {
@@ -118,6 +149,12 @@
         message.textContent = 'Не удалось отправить. Попробуйте позже или свяжитесь с нами по телефону.';
         message.classList.add('rsvp-form__message--error');
         message.classList.add('is-visible');
+        isSubmitting = false;
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = 'Отправить';
+          submitButton.style.opacity = '1';
+        }
       });
     });
   }

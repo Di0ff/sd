@@ -228,6 +228,7 @@ type RSVPRequest struct {
 	Phone          string `json:"phone"`
 	Email          string `json:"email"`
 	TelegramChatID *int64 `json:"telegram_chat_id,omitempty"`
+	GuestCount     int    `json:"guest_count"`
 }
 
 type storedRSVP struct {
@@ -235,6 +236,7 @@ type storedRSVP struct {
 	Phone          string `json:"phone"`
 	Email          string `json:"email"`
 	TelegramChatID *int64 `json:"telegram_chat_id,omitempty"`
+	GuestCount     int    `json:"guest_count"`
 	At             string `json:"at"`
 }
 
@@ -452,6 +454,10 @@ func main() {
 		name := strings.TrimSpace(body.Name)
 		phone := strings.TrimSpace(body.Phone)
 		email := strings.TrimSpace(body.Email)
+		guestCount := body.GuestCount
+		if guestCount < 1 {
+			guestCount = 1
+		}
 
 		if name == "" || len(name) > 200 {
 			http.Error(w, `{"error":"name required, max 200 chars"}`, http.StatusBadRequest)
@@ -574,10 +580,25 @@ func main() {
 			}
 		}
 
+		// Проверка на дубликат (по телефону)
+		phoneNorm := normalizePhone(phone)
+		existingList, _ := store.list()
+		for _, r := range existingList {
+			if normalizePhone(r.Phone) == phoneNorm {
+				// Уже есть такая запись — не добавляем дубликат
+				log.Printf("RSVP: дубликат телефона %s, пропускаем", phone)
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(`{"ok":true,"duplicate":true}`))
+				return
+			}
+		}
+
 		_ = store.append(storedRSVP{
 			Name:           name,
 			Phone:          phone,
 			Email:          email,
+			GuestCount:     body.GuestCount,
 			TelegramChatID: body.TelegramChatID,
 			At:             time.Now().UTC().Format(time.RFC3339),
 		})
@@ -611,7 +632,7 @@ func main() {
 		idx, _ := f.NewSheet(sheet)
 		f.SetActiveSheet(idx)
 		f.DeleteSheet("Sheet1")
-		headers := []string{"ФИО", "Телефон", "Почта", "Дата"}
+		headers := []string{"ФИО", "Телефон", "Почта", "Гостей", "Дата"}
 		for i, h := range headers {
 			cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 			_ = f.SetCellValue(sheet, cell, h)
@@ -621,7 +642,8 @@ func main() {
 			_ = f.SetCellValue(sheet, "A"+r, entry.Name)
 			_ = f.SetCellValue(sheet, "B"+r, entry.Phone)
 			_ = f.SetCellValue(sheet, "C"+r, entry.Email)
-			_ = f.SetCellValue(sheet, "D"+r, formatExportDate(entry.At))
+			_ = f.SetCellValue(sheet, "D"+r, entry.GuestCount)
+			_ = f.SetCellValue(sheet, "E"+r, formatExportDate(entry.At))
 		}
 		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 		w.Header().Set("Content-Disposition", `attachment; filename="rsvp.xlsx"`)
@@ -985,25 +1007,29 @@ func cancelRSVPByChatID(rsvpStore *rsvpStore, tgStore *tgUserStore, chatID int64
 			break
 		}
 	}
-	
-	if userPhone == "" {
-		return nil // Пользователь не найден
-	}
-	
+
 	// Удаляем RSVP из списка
 	rsvpStore.mu.Lock()
 	defer rsvpStore.mu.Unlock()
-	
+
 	var list []storedRSVP
 	data, err := os.ReadFile(rsvpStore.path)
 	if err == nil {
 		_ = json.Unmarshal(data, &list)
 	}
-	
-	// Фильтруем - удаляем записи с этим телефоном
+
+	// Фильтруем - удаляем записи с этим телефоном ИЛИ этим chat_id
 	var newList []storedRSVP
 	for _, r := range list {
-		if normalizePhone(r.Phone) != normalizePhone(userPhone) {
+		// Удаляем если совпадает телефон или chat_id
+		shouldRemove := false
+		if userPhone != "" && normalizePhone(r.Phone) == normalizePhone(userPhone) {
+			shouldRemove = true
+		}
+		if r.TelegramChatID != nil && *r.TelegramChatID == chatID {
+			shouldRemove = true
+		}
+		if !shouldRemove {
 			newList = append(newList, r)
 		}
 	}

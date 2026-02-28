@@ -81,6 +81,16 @@
             <label class="rsvp-form__label" for="guest-email">Почта</label>
             <input class="rsvp-form__input" id="guest-email" type="email" name="email" placeholder="guest@example.com">
           </div>
+          <div class="rsvp-form__row">
+            <label class="rsvp-form__label" for="guest-count">Количество гостей</label>
+            <select class="rsvp-form__input" id="guest-count" name="guest_count" style="cursor: pointer;">
+              <option value="1">1 персона (только я)</option>
+              <option value="2">2 персоны</option>
+              <option value="3">3 персоны</option>
+              <option value="4">4 персоны</option>
+              <option value="5">5 персон</option>
+            </select>
+          </div>
           <button type="submit" class="rsvp-form__submit">Отправить</button>
           <p class="rsvp-form__message" id="rsvp-message" role="status" aria-live="polite">Спасибо! Рады, что вы будете с нами. Ждём на празднике!</p>
         </form>
